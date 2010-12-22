@@ -1,7 +1,7 @@
 # drupal-opengraph
 
 This module allows any page to be marked up with Facebook's Open Graph meta data. 
-A page requires this meta data for effective use of the Like button and other social plugins 
+A page requires this meta data for effective use of the Like button and other social plugins. 
 For more information on the Open Graph protocol see http://opengraphprotocol.org 
 
 This module is released under the GNU General Public License, version 2. 
@@ -14,10 +14,10 @@ This version of the module only works with Drupal 6.x.
 
 This module installs a single `opengraph` table which holds open graph properties against node ids. 
 Make sure your HTML page tempate has namespaces as follows: 
-<html 
-  xmlns="http://www.w3.org/1999/xhtml" 
-  xmlns:fb="http://www.facebook.com/2008/fbml" 
-  xmlns:og="http://opengraphprotocol.org/schema/">
+    <html 
+      xmlns="http://www.w3.org/1999/xhtml" 
+      xmlns:fb="http://www.facebook.com/2008/fbml" 
+      xmlns:og="http://opengraphprotocol.org/schema/">
 
 Go straight to the settings page to configure your node types and default properties:
  admin/content/opengraph
