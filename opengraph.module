@@ -1,0 +1,450 @@
+<?php
+/**
+ * $Id$
+ * Facebook Open Graph Protocol implememtation for Drupal 6
+ * Adds Open Graph meta data to any page and allows individual nodes to override
+ * @author Tim Whitlock
+ * @license http://www.gnu.org/licenses/gpl-2.0.txt
+ */
+
+
+
+
+/**
+ * Implementation of hook_menu()
+ */
+function opengraph_menu() {
+	$items['admin/content/opengraph'] = array(
+		'title' => t('Open Graph properties'),
+		'description' => t('Default Open Graph properties across the site'),
+		'page callback' => 'drupal_get_form',
+		'page arguments' => array('opengraph_manage_settings'),
+		'access arguments' => array('administer site settings'),
+		'type' => MENU_NORMAL_ITEM,
+	);
+	return $items;
+}
+
+
+
+/**
+ * Admin settings form
+ */
+function opengraph_manage_settings() {
+	$defaults = _opengraph_defaults();
+	$form = array();
+	$form['opengraph_defaults'] = array (
+		'#type' => 'fieldset',
+		'#title' => t('Default properties'),
+		'#description' => t('Default Open Graph properties for all pages without specific node settings'),
+		'#collapsible' => true,
+		'#collapsed'   => true,
+    	'#access' => user_access('override node settings') || user_access('administer nodes'),
+	);
+	$form['opengraph_defaults'] += _opengraph_setting_fields( _opengraph_defaults(), 'opengraph_' );
+	// and some global-only params
+	$form['opengraph_globals'] = array (
+		'#type' => 'fieldset',
+		'#title' => t('Optional properties'),
+		'#description' => t("Additional site-wide properties which can't be overridden by individual nodes"),
+		'#collapsible' => true,
+		'#collapsed'   => true,
+    	'#access' => user_access('override node settings') || user_access('administer nodes'),
+		'opengraph_country-name' => array (
+			'#type' => 'textfield',
+			'#title' => t('Country name'),
+			'#default_value' => $defaults['country-name'],
+			'#maxlength' => 32,
+		),
+		'opengraph_region' => array (
+			'#type' => 'textfield',
+			'#title' => t('Region'),
+			'#default_value' => $defaults['region'],
+			'#maxlength' => 64,
+		),
+		'opengraph_locality' => array (
+			'#type' => 'textfield',
+			'#title' => t('Locality'),
+			'#default_value' => $defaults['locality'],
+			'#maxlength' => 64,
+		),
+		'opengraph_postal-code' => array (
+			'#type' => 'textfield',
+			'#title' => t('Postal code'),
+			'#default_value' => $defaults['postal-code'],
+			'#maxlength' => 12,
+		),
+		'opengraph_street-address' => array (
+			'#type' => 'textfield',
+			'#title' => t('Street address'),
+			'#default_value' => $defaults['street-address'],
+			'#maxlength' => 255,
+		),
+		'opengraph_latitude' => array (
+			'#type' => 'textfield',
+			'#title' => t('Geographic latitude'),
+			'#default_value' => $defaults['latitude'],
+			'#maxlength' => 32,
+		),
+		'opengraph_longitude' => array (
+			'#type' => 'textfield',
+			'#title' => t('Geographic longitude'),
+			'#default_value' => $defaults['longitude'],
+			'#maxlength' => 32,
+		),
+	);
+	// node type mappings
+	$form['opengraph_types'] = array (
+		'#type' => 'fieldset',
+		'#title' => t('Node type mappings'),
+		'#description' => "Apply a default object type to available node types. Leave blank to disable Open Graph for a type<br />See http://opengraphprotocol.org for latest list of supported \"Object Types\"",
+		'#collapsible' => true,
+		'#collapsed'   => true,
+    	'#access' => user_access('override node settings') || user_access('administer nodes'),
+	);
+	foreach( content_types() as $t => $type ){
+		$key = 'opengraph_type_'.$t;
+		$val = variable_get($key,null);
+		$form['opengraph_types'][$key] = array(
+			'#type'  => 'textfield',
+			'#title' => $type['name'].' ('.$t.')',
+			'#default_value' => is_null($val) ? $defaults['type'] : $val,
+			'#maxlength' => '32',
+		);
+	}
+	$form['#attributes']['enctype'] = 'multipart/form-data'; // <- support file upload!
+	return system_settings_form($form);
+}
+
+
+
+/**
+ * Re-usable array of settings that apply globally and to nodes
+ * @access private
+ * @return array
+ */
+function _opengraph_setting_fields( array $defaults, $prefix = '' ){
+	return array (
+		$prefix.'type' => array (
+			'#type' => 'textfield',
+			'#title' => t('Type'),
+			'#description' => t('See http://opengraphprotocol.org for latest list of supported "Object Types"'),
+			'#default_value' => $defaults['type'],
+			'#maxlength' => 16,
+		),
+		$prefix.'admins' => array (
+			'#type' => 'textfield',
+			'#title' => t('FB Admins'),
+			'#description' => t('Comma separated list of Facebook user IDs that can administer fan pages'),
+			'#default_value' => $defaults['admins'],
+			'#maxlength' => 255,
+		),
+		$prefix.'app_id' => array (
+			'#type' => 'textfield',
+			'#title' => t('FB App ID'),
+			'#description' => t('Facebook application ID that can administer fan pages'),
+			'#default_value' => $defaults['app_id'],
+			'#maxlength' => 255,
+		),
+//      I don't know why, but the extra fieldset breaks nesting of form keys on node edit form.
+//		$prefix.'image_fieldset' => array (
+//			'#tree' => false,
+//			'#type' => 'fieldset',
+//			'#title' => t('Image'),
+			$prefix.'image' => array (
+				'#type' => 'textfield',
+				'#title' => t('Current image path'),
+				'#default_value' => $defaults['image'],
+				'#maxlength' => 255,
+			),
+			$prefix.'image_upload' => array (
+				'#type' => 'file',
+				'#title' => t('Upload new image file'),
+				'#description' => t('Thumbnail image; min 50x50, max ratio of 3:1'),
+				'#size' => 60,
+				'#element_validate' => array('_opengraph_handle_image'),
+			),
+//		),
+	);
+}
+
+
+
+
+/**
+ * Handle image file upload for global and node settings
+ * @access private
+ */
+function _opengraph_handle_image( $element, &$form_state ) {
+	// global image - from opengraph admin settings 
+	if ( is_object( $file = file_save_upload('opengraph_image_upload') ) ){
+		$dir = file_directory_path().'/opengraph';
+		file_check_directory($dir, FILE_CREATE_DIRECTORY, 'opengraph_image_upload');
+		if( file_copy( $file, $dir.'/'.$file->filename, FILE_EXISTS_REPLACE ) ) {
+			$form_state['values']['opengraph_image'] = $file->filepath;
+			drupal_set_message('Saved image to '.$file->filepath);
+		}
+	}
+	// else node image from edit form
+	else if( is_object( $file = file_save_upload('opengraph') ) ){
+		$dir = file_directory_path().'/opengraph';
+		file_check_directory($dir, FILE_CREATE_DIRECTORY, 'opengraph' );
+		if( file_copy( $file, $dir.'/'.$file->filename, FILE_EXISTS_REPLACE ) ) {
+			$form_state['values']['opengraph']['image'] = $file->filepath;
+			drupal_set_message('Saved image to '.$file->filepath);
+		}
+	}
+}
+
+
+
+
+/**
+ * Implementation of hook_perm().
+ */
+function opengraph_perm() {
+  return array('override node settings', 'override profile settings');
+}
+
+
+
+
+/**
+ * Generate default properties for a given node
+ * @todo invoke module hook for getting parameters from non-node pages?
+ * @return array
+ */
+function _opengraph_defaults( $node = null ){
+	// attempt to get node-specific defaults if configured
+	if( is_object($node) && $node->type ){
+		$type = variable_get('opengraph_type_'.$node->type, null);
+		// @todo if type is not yet configured, should we default to global type?
+		is_null($type) and $type = variable_get('opengraph_type', 'website');
+		// extract defaults unless node has been excluded
+		if( ! $type ){
+			return array(); // <- disabled for this node
+		}
+		$defaults = array (
+			'url'   => url('node/'.$node->nid, array('absolute'=>true) ),
+			'type'  => $type,
+			'title' => $node->title,
+		);
+		// iterate over node for likely looking thumbnail image
+		$props = array_keys( get_object_vars($node) );
+		foreach( $props as $prop ){
+			if( strpos($prop,'field_') === 0 && strpos($prop,'thumb') ){
+				$value = $node->$prop;
+				if( ! empty($value[0]['value']) ){
+					$defaults['image'] = $value[0]['value'];
+					break;
+				}
+			}
+		}
+	}
+	else {
+		$defaults = array (
+			'url'   => variable_get('opengraph_url', 'http://'.$_SERVER['HTTP_HOST'].'/'),
+			'type'  => variable_get('opengraph_type', 'website'),
+			'title' => variable_get('opengraph_title', variable_get('site_slogan','') ),
+		);
+	}
+	// override empty values
+	empty($defaults['image']) and $defaults['image'] = variable_get('opengraph_image','');
+	// properties extractable from a node
+	$defaults['site_name'] = variable_get('site_name','');
+	$defaults['admins'] = variable_get('opengraph_admins','');
+	$defaults['app_id'] = variable_get('opengraph_app_id','');
+	$defaults['country-name'] = variable_get('opengraph_country-name','United Kingdom');
+	$defaults['region'] = variable_get('opengraph_region','London');
+	$defaults['locality'] = variable_get('opengraph_locality','');
+	$defaults['postal-code'] = variable_get('opengraph_postal-code','');
+	$defaults['street-address'] = variable_get('opengraph_street-address','');
+	// @todo could use GeoIP if available to get the default geolocation
+	$defaults['latitude'] = variable_get('opengraph_latitude','');
+	$defaults['longitude'] = variable_get('opengraph_longitude','');
+	return $defaults;
+}
+
+
+
+
+/**
+ * Implementation of hook_form_alter().
+ * catch node edit forms for all applicable node types
+ */
+function opengraph_form_alter( &$form, &$form_state, $form_id ) {
+	if( empty($form['#node']) || $form_id !== $form['#node']->type.'_node_form' ){
+		return;
+	}
+	// OG may be disabled for this node type
+	if( ! _opengraph_defaults($form['#node']) ){
+		return;
+	}
+	
+	$defaults = array();
+	if(isset($form['#node']->opengraph)) {
+		$defaults = $form['#node']->opengraph;
+	}
+	
+	// define open graph fields with a fieldset
+	$form['opengraph'] = array (
+		'#tree' => true,
+		'#type' => 'fieldset',
+		'#title' => t('Facebook Open Graph'),
+		'#description' => t('Override the default Open Graph object properties for this node. Leave blank to use global default, or enter &quot;&lt;none&gt;&quot; to omit'),
+		'#collapsible' => TRUE,
+    	'#access' => user_access('override node settings') || user_access('administer nodes'),
+	);
+	$form['opengraph'] += _opengraph_setting_fields( $defaults );
+}	
+
+
+
+
+/**
+ * Implementation of hook_nodeapi().
+ */
+function opengraph_nodeapi( &$node, $op, $teaser = null, $page = null ) {
+	switch( $op ){
+	
+	case 'delete':
+		db_query("DELETE FROM {opengraph} WHERE `nid` = %d LIMIT 1;", $node->nid );
+		break;
+	
+	case 'insert':	
+	case 'update':
+		if( $node->opengraph ){
+			$og = $node->opengraph;
+			// blank out any values kept the same as the defaults // This fixes undesirable overriding of defaults
+			foreach( _opengraph_defaults($node) as $prop => $value ){
+				if( $og[$prop] === $value ){
+					$og[$prop] = '';
+				}
+			}
+			// debug // krumo( $node ); die(); _adultswim_trace( print_r($og,1) );
+			db_query("REPLACE INTO {opengraph} VALUES(%d,'%s','%s','%s','%s')", $node->nid, $og['type'], $og['admins'], $og['app_id'], $og['image'] );
+		}
+		break;
+	
+	case 'load':
+		// grab OG properties from node and merge in defaults where props are empty
+		$dflts = _opengraph_defaults( $node );
+		if( ! $dflts ){
+			// disabled for this node type
+			return array();
+		}
+		$props = db_fetch_array(db_query("SELECT `type`,`admins`,`app_id`,`image` FROM {opengraph} WHERE `nid` = %d LIMIT 1;", $node->nid));
+		foreach( $dflts as $prop => $value ){
+			empty($props[$prop]) and $props[$prop] = $value;
+		}
+		return array( 'opengraph' => $props );
+	}
+}
+
+
+
+/**
+ * Implements hook_preprocess_page().
+ * Appends Open Graph meta markup to the <head>
+ * Note - ensure you have the og namespace in your template xmlns:og="http://opengraphprotocol.org/schema/"
+ */
+function opengraph_preprocess_page( &$vars ) {
+	$node = $vars['node'];
+	// if page is not a node, we'll grab the global defaults
+	$props = is_object($node) && isset($node->opengraph) ? $node->opengraph : _opengraph_defaults($node);
+	if( ! $props ){
+		// disabled for this node type
+		return;
+	}
+	// URLify the image path if applicable
+	if( $props['image'] && $props['image'] !== '<none>' && strpos($props['image'],'http') !== 0 ){
+		$props['image'] = url( $props['image'], array('absolute'=>true) );
+	}
+	// map namespaces
+	$prefixes = array (
+		'admins' => 'fb',
+		'app_id' => 'fb',
+	);
+	// write OG meta tags into <head>
+	$vars['head'] .= "\n<!-- Facebook Open Graph Protocol -->\n";
+	foreach( $props as $prop => $value ){
+		$value = trim($value);
+		if( ! $value || $value === '<none>' ){
+			continue;
+		}
+		$prefix = isset($prefixes[$prop]) ? $prefixes[$prop] : 'og';
+		$vars['head'] .= sprintf("<meta property=\"%s:%s\" content=\"%s\" />\n", $prefix, check_plain($prop), check_plain($value) );
+	}
+	$vars['head'] .= "<!--// end Facebook Open Graph Protocol -->\n";
+}
+
+
+
+
+
+/**
+ * Implementation of hook_block()
+ * Provides:
+ * - like button
+ */
+function opengraph_block( $op, $delta = 0, $edit = array() ){
+	switch( $op ){
+	case 'list':
+		return array (
+			array (
+				'info'  => t('Open Graph - Like button'),
+				'cache' => BLOCK_CACHE_PER_PAGE,
+				'visibility' => 1,
+			),
+		);
+	case 'view':
+		$block = array();
+		switch( $delta ){
+		case 0: 
+			$url = 'http://'.$_SERVER['HTTP_HOST'].$_SERVER['REQUEST_URI'];
+			$block['subject'] = t('Like this');
+			$block['content'] = theme('opengraph_like_block', $url );
+			break;
+		}
+		return $block;
+	}
+}
+
+
+
+/**
+ * Implementation of hook_theme()
+ */
+function opengraph_theme( $existing, $type, $theme, $path ){
+	return array (
+		'opengraph_like_block' => array (
+      		'arguments' => array( 'url' => '', 'width' => '450', 'height' => '35' ),
+		),
+	);
+}
+
+
+
+/**
+ * theme simple like button iframe
+ * @todo configurable params - for now just override theme function
+ */
+function theme_opengraph_like_block( $url, $width = '450', $height = '35' ){
+	return '<iframe src="http://www.facebook.com/plugins/like.php?href='.rawurlencode($url).
+		       '&amp;layout=standard'.
+		       '&amp;show_faces=false'.
+		       '&amp;width='.$width.
+		       '&amp;height='.$height.
+		       '&amp;action=like'.
+		       '&amp;colorscheme=light'.
+		       '" scrolling="no" frameborder="0" allowTransparency="true" class="opengraph-like" height="'.$height.'" width="'.$width.'"></iframe>';
+}
+
+
+
+
+
+
+
+
+

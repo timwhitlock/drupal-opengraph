@@ -1,0 +1,77 @@
+<?php
+/**
+ * $Id$
+ * Open Graph module installer
+ * @author Tim Whitlock
+ * @license http://www.gnu.org/licenses/gpl-2.0.txt
+ */
+
+
+
+
+
+/**
+ * Implements hook_install().
+ */
+function opengraph_install() {
+	drupal_install_schema('opengraph');
+	drupal_set_message( t('Open Graph schema installed') );
+}
+
+
+
+/**
+ * Implements hook_uninstall().
+ */
+function opengraph_uninstall() {
+	drupal_uninstall_schema('opengraph');
+}
+
+
+
+/**
+ * Implements hook_schema().
+ */
+function opengraph_schema() {
+	$schema = array();
+	$schema['opengraph'] = array (
+		'description' => 'The table containing open graph object properties for all applicable nodes',
+		'fields' => array (
+			'nid' => array (
+	        	'description' => 'The node ID.',
+				'type' => 'int',
+				'unsigned' => true,
+				'not null' => true,
+				'default' => '0',
+			),
+			'type' => array (
+				'type' => 'varchar',
+				'length' => 16,
+				'not null' => true,
+				'default' => '',
+			),
+			'admins' => array (
+				'type' => 'varchar',
+				'length' => 255,
+				'not null' => true,
+				'default' => '',
+			),
+			'app_id' => array (
+				'type' => 'varchar',
+				'length' => 255,
+				'not null' => true,
+				'default' => '',
+			),
+			'image' => array (
+				'type' => 'varchar',
+				'length' => 255,
+				'not null' => true,
+				'default' => '',
+			),
+		),
+		'primary key' => array('nid'),
+	);
+	return $schema;
+}
+
+

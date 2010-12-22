@@ -1,0 +1,8 @@
+;$Id$
+name = "Open Graph"
+description = "Integration with Facebook's Open Graph Protocol"
+package = "Facebook"
+core = 6.x
+
+; @todo contribute to drupal.org
+version = "6.x-0.2"
