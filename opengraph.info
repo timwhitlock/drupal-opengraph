@@ -1,6 +1,6 @@
 ;$Id$
 name = "Open Graph"
-description = "Integration with Facebook's Open Graph Protocol"
+description = "Integration with the Open Graph Protocol"
 package = "Facebook"
 core = 6.x
 
